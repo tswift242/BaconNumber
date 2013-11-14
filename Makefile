@@ -1,5 +1,6 @@
 PYTHON = python
-SRCS = $(wildcard *.py)
+#SRCS = $(wildcard *.py)
+SRCS = bndlearner.py main.py
 MAIN = main.py
 CLASSES = $(SRCS:.py=.pyc)
 GOAL = learn
