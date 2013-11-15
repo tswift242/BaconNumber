@@ -1,5 +1,5 @@
 from bs4 import BeautifulSoup
-import urllib2
+import requests
 import re
 #from numpy import *
 
@@ -11,9 +11,10 @@ class BNDlearner:
 	GOOGLE_URL_PREFIX = "https://www.google.com/search?q=bacon+number+"
 	ANSWER_CSS_CLASS = "answer_predicate" #full class is "answer_predicate vk_h"
 	NUMBER_EXTRACTOR_REGEX = ".*(\d+).*"
+	#TODO: possibly make this argument to self
+	DEFAULT_USER_AGENT = {"User-agent": "Mozilla/5.0 (Windows NT 6.1; Win64; X64; rv:25.0) Gecko 20100101 Firefox/25.0"}
 
 	def __init__(self):
-		#pass in other arguments?
 		#*** make distribution vector an instance variable?
 		#use os.path for actor resource file, and use imdb tools to read this file??
 		self.dist = 0 #TODO: change/remove this
@@ -25,25 +26,18 @@ class BNDlearner:
 		e.g. "Johnny Depp"
 		"""
 
-		#TODO: look at replacing urllib2 stuff with requests
-		#change user-agent to allow us to scrape data from Google
-		opener = urllib2.build_opener()
-		opener.addheaders = [("User-agent", "Mozilla/5.0 (Windows NT 6.1; Win64; X64; rv:25.0) Gecko 20100101 Firefox/25.0")]
-		urllib2.install_opener(opener)
-
-		#form url for this specific actor and get its html
 		actorURL = BNDlearner.GOOGLE_URL_PREFIX + actor.replace(" ", "+")
-		actorHtml = urllib2.urlopen(actorURL).read()
+		#change user-agent to allow us to scrape data from Google
+		actorHtml = requests.get(actorURL, headers = BNDlearner.DEFAULT_USER_AGENT).text
 
 		#parse bacon number information from html
 		soup = BeautifulSoup(actorHtml)
 		answerTag = soup.find(class_=BNDlearner.ANSWER_CSS_CLASS)
 
-		#parse number out of answerTag's string and returns it
+		#parse number out of answerTag's string and return it
 		return self.extractNumber(answerTag.string)
 
 	def learnBaconNumberDistribution(self):
-		"""TODO: give parameters"""
 		"""TODO: multithread this!!!"""
 
 	#private static
