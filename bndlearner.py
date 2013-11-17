@@ -15,11 +15,11 @@ class BNDlearner:
 	DEFAULT_USER_AGENT = {"User-agent": "Mozilla/5.0 (Windows NT 6.1; Win64; X64; rv:25.0) Gecko 20100101 Firefox/25.0"}
 
 	def __init__(self, maxBaconNumber):
-		#*** make distribution vector an instance variable?
-		self.dist = zeros((maxBaconNumber+1,1))
+		self.maxBaconNumber = maxBaconNumber
+		self.dist = zeros((self.maxBaconNumber+1,1))
 
 	def getBaconNumber(self, actor):
-		"""Returns the Bacon Number of the given actor
+		"""Returns the Bacon Number of the given actor.
 
 		:param actor: string specifying the full name of an actor, 
 		e.g. "Johnny Depp"
@@ -53,12 +53,15 @@ class BNDlearner:
 			actors = f.readlines()
 			f.close()
 
-		"""TODO: multithread this!!!"""
-		"""TODO: consider using numpy.histogram (especially after multithreading)"""
+		#TODO: multithread this!!!
+		#TODO: consider using numpy.histogram (especially after multi-threading)
 		#compute bacon number for each actor, and increment counter in distribution
 		for actor in actors:
 			bn = self.getBaconNumber(actor)
-			self.dist[bn] += 1
+			if bn <= self.maxBaconNumber:
+				self.dist[bn] += 1
+			else:
+				print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
 
 		#normalize distribution
 		numActors = len(actors)
