@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
 import requests
 import re
-from numpy import *
+from numpy import zeros
 from bndlexceptions import NoBaconNumber
 
 class BNDlearner:
@@ -75,7 +75,11 @@ class BNDlearner:
 		self.dist /= numActors
 
 	#private static
-	#extracts the first number from a string, casts it to an integer, and then returns it
 	def extractNumber(self, string):
+		"""Extracts the first number from a string, 
+		casts it to an integer, and then returns it.
+
+		:param string: string to be matched against regex NUMBER_EXTRACTOR_REGEX
+		"""
 		match = re.match(BNDlearner.NUMBER_EXTRACTOR_REGEX, string, re.S)
 		return int(match.group(1))
