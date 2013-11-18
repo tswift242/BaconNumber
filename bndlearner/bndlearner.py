@@ -2,6 +2,7 @@ from bs4 import BeautifulSoup
 import requests
 import re
 from numpy import *
+from bndlexceptions import NoBaconNumber
 
 class BNDlearner:
 	"""Learns the distribution the Bacon Number by
@@ -16,7 +17,7 @@ class BNDlearner:
 
 	def __init__(self, maxBaconNumber):
 		self.maxBaconNumber = maxBaconNumber
-		self.dist = zeros((self.maxBaconNumber+1,1))
+		self.dist = zeros((self.maxBaconNumber+1,1)) #distribution vector of bacon number
 
 	def getBaconNumber(self, actor):
 		"""Returns the Bacon Number of the given actor.
@@ -32,6 +33,8 @@ class BNDlearner:
 		#parse bacon number information from html
 		soup = BeautifulSoup(actorHtml)
 		answerTag = soup.find(class_=BNDlearner.ANSWER_CSS_CLASS)
+		if answerTag is None:
+			raise NoBaconNumber("no bacon number found", actor)
 
 		#parse number out of answerTag's string and return it
 		return self.extractNumber(answerTag.string)
@@ -57,11 +60,15 @@ class BNDlearner:
 		#TODO: consider using numpy.histogram (especially after multi-threading)
 		#compute bacon number for each actor, and increment counter in distribution
 		for actor in actors:
-			bn = self.getBaconNumber(actor)
-			if bn <= self.maxBaconNumber:
-				self.dist[bn] += 1
+			try:
+				bn = self.getBaconNumber(actor)
+			except NoBaconNumber as e:
+				print "Warning: {0}".format(str(e))
 			else:
-				print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
+				if bn <= self.maxBaconNumber:
+					self.dist[bn] += 1
+				else:
+					print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
 
 		#normalize distribution
 		numActors = len(actors)

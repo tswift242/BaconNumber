@@ -1,7 +1,8 @@
 PYTHON = python
+PROJDIR = bndlearner
 #SRCS = $(wildcard *.py)
-SRCS = bndlearner.py main.py
-MAIN = main.py
+MAIN = $(PROJDIR)/main.py
+SRCS = $(PROJDIR)/bndlearner.py $(PROJDIR)/bndlexceptions.py $(MAIN)
 CLASSES = $(SRCS:.py=.pyc)
 GOAL = learn
 OUTFILE = results.txt
