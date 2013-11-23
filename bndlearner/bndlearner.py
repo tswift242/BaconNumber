@@ -4,6 +4,7 @@ import re
 from numpy import zeros
 from numpy import histogram, arange, uint8, float16
 from bndlexceptions import NoBaconNumber
+from multiprocessing import Pool
 
 class BNDlearner:
 	"""Learns the distribution the Bacon Number by
@@ -62,7 +63,15 @@ class BNDlearner:
 			actors = f.readlines()
 			f.close()
 
-		self.learnBaconNumberDistribution(actors)
+		self.dist = self.learnBaconNumberDistribution(actors)
+		return self.dist
+
+	def learnBaconNumberDistributionMP(self, actors):
+		"""Learns the distribution of the bacon number for the
+		provided list of actors using multiprocessing
+		"""
+		pool = Pool(processes=4)
+		#pool.imap()
 
 	def learnBaconNumberDistribution(self, actors):
 		"""Learns the distribution of the bacon number for the
@@ -93,7 +102,8 @@ class BNDlearner:
 		# compute normalized histogram from the gathered bacon numbers
 		# histogram's bins have upperbound maxBaconNumber+2 so that bacon numbers 
 		# maxBaconNumber-1 and maxBaconNumber are quantized into different bins
-		self.dist, bins = histogram(baconNumbers, bins=arange(self.maxBaconNumber+2), density=True)
+		dist, bins = histogram(baconNumbers, bins=arange(self.maxBaconNumber+2), density=True)
+		return dist
 
 	def learnBaconNumberDistribution2(self, actors):
 		"""Learns the distribution of the bacon number for the
@@ -106,6 +116,7 @@ class BNDlearner:
 		:param actors: list of actor names
 		"""
 
+		dist = zeros((self.maxBaconNumber+1), dtype=float16) #smallest available float type
 		for actor in actors:
 			try:
 				bn = self.getBaconNumber(actor)
@@ -113,13 +124,14 @@ class BNDlearner:
 				print "Warning: {0}".format(str(e))
 			else:
 				if bn <= self.maxBaconNumber:
-					self.dist[bn] += 1
+					dist[bn] += 1
 				else:
 					print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
 
 		# normalize distribution
 		numActors = len(actors)
-		self.dist /= numActors
+		dist /= numActors
+		return dist
 
 	#private static
 	def extractNumber(self, string):
