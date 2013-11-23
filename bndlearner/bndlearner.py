@@ -1,8 +1,8 @@
-from bs4 import BeautifulSoup
 import requests
+from bs4 import BeautifulSoup
 import re
 from numpy import zeros
-#from numpy import histogram, arange, uint8
+from numpy import histogram, arange, uint8, float16
 from bndlexceptions import NoBaconNumber
 
 class BNDlearner:
@@ -17,8 +17,13 @@ class BNDlearner:
 	DEFAULT_USER_AGENT = {"User-agent": "Mozilla/5.0 (Windows NT 6.1; Win64; X64; rv:25.0) Gecko 20100101 Firefox/25.0"}
 
 	def __init__(self, maxBaconNumber):
+		"""
+		:attribute maxBaconNumber: maximum bacon number accounted for in the distribution
+		:attribute dist: bacon number distribution vector for values between 0 and 
+		maxBaconNumber, inclusive
+		"""
 		self.maxBaconNumber = maxBaconNumber
-		self.dist = zeros((self.maxBaconNumber+1)) #distribution vector of bacon number
+		self.dist = zeros((self.maxBaconNumber+1), dtype=float16) #smallest available float type
 
 	def getBaconNumber(self, actor):
 		"""Returns the Bacon Number of the given actor.
@@ -40,9 +45,9 @@ class BNDlearner:
 		#parse number out of answerTag's string and return it
 		return self.extractNumber(answerTag.string)
 
-	def learnBaconNumberDistribution(self, actorsFile):
+	def learnBaconNumberDistributionFromFile(self, actorsFile):
 		"""Learns the distribution of the bacon number for the
-		provided list of actors.
+		list of actors provided in the given file.
 
 		:param actorsFile: string specifying the filename of 
 		a list of actors
@@ -57,8 +62,50 @@ class BNDlearner:
 			actors = f.readlines()
 			f.close()
 
-		#TODO: multithread this!!!
-		#compute bacon number for each actor, and increment counter in distribution
+		self.learnBaconNumberDistribution(actors)
+
+	def learnBaconNumberDistribution(self, actors):
+		"""Learns the distribution of the bacon number for the
+		provided list of actors.
+		This approach stores computed bacon numbers in an intermediate array 
+		to avoid otherwise necessary synchronization costs on the shared resource self.dist.
+		A histogram is then created across the intermediate array and then normalized, 
+		leading to the final distribution.
+		As a result, this approach is faster under multiprocessing, but does require an extra amount of memory on a linear order.
+
+		:param actors: list of actor names
+		"""
+
+		numActors = len(actors)
+		baconNumbers = zeros((numActors), dtype=uint8) # smallest available int type
+		# TODO: multithread this!!!
+		for index, actor in enumerate(actors):
+			try:
+				bn = self.getBaconNumber(actor)
+			except NoBaconNumber as e:
+				print "Warning: {0}".format(str(e))
+			else:
+				if bn <= self.maxBaconNumber:
+					baconNumbers[index] = bn
+				else:
+					print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
+
+		# compute normalized histogram from the gathered bacon numbers
+		# histogram's bins have upperbound maxBaconNumber+2 so that bacon numbers 
+		# maxBaconNumber-1 and maxBaconNumber are quantized into different bins
+		self.dist, bins = histogram(baconNumbers, bins=arange(self.maxBaconNumber+2), density=True)
+
+	def learnBaconNumberDistribution2(self, actors):
+		"""Learns the distribution of the bacon number for the
+		provided list of actors.
+		This approach does not store computed bacon numbers in an intermediate array, 
+		but rather manually computes the histogram of the distribution online.
+		As a result, this approach is more costly (time-wise) and 
+		more complicated when multiprocessing
+
+		:param actors: list of actor names
+		"""
+
 		for actor in actors:
 			try:
 				bn = self.getBaconNumber(actor)
@@ -70,28 +117,9 @@ class BNDlearner:
 				else:
 					print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
 
-		#normalize distribution
+		# normalize distribution
 		numActors = len(actors)
 		self.dist /= numActors
-
-
-
-		#numActors = len(actors)
-		#baconNumbers = zeros((numActors), uint8)
-		#for i in range(0, numActors):
-			#actor = actors[i]
-			#try:
-				#bn = self.getBaconNumber(actor)
-			#except NoBaconNumber as e:
-				#print "Warning: {0}".format(str(e))
-			#else:
-				#if bn <= self.maxBaconNumber:
-					#baconNumbers[i] = bn
-				#else:
-					#print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
-
-		#self.dist, bins = histogram(baconNumbers, bins=arange(self.maxBaconNumber+2), density=True)
-
 
 	#private static
 	def extractNumber(self, string):

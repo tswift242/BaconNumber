@@ -10,7 +10,7 @@ def main():
 
 	bndl = BNDlearner(maxBaconNumber)
 	try:
-		bndl.learnBaconNumberDistribution(actorsFile)
+		bndl.learnBaconNumberDistributionFromFile(actorsFile)
 	except IOError as e:
 		traceback.print_exc()
 	print bndl.dist
