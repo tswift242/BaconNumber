@@ -1,10 +1,10 @@
 import requests
 from bs4 import BeautifulSoup
 import re
-from numpy import zeros
-from numpy import histogram, arange, uint8, float16
+from numpy import zeros, histogram, arange, uint8, float16
 from bndlexceptions import NoBaconNumber
 from multiprocessing import Pool
+import math
 
 class BNDlearner:
 	"""Learns the distribution the Bacon Number by
@@ -63,15 +63,22 @@ class BNDlearner:
 			actors = f.readlines()
 			f.close()
 
-		self.dist = self.learnBaconNumberDistribution(actors)
+		self.dist = self.learnBaconNumberDistributionMP(actors)
 		return self.dist
 
 	def learnBaconNumberDistributionMP(self, actors):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors using multiprocessing
 		"""
-		pool = Pool(processes=4)
-		#pool.imap()
+
+		numProcs = 4
+		pool = Pool(processes=numProcs)
+		#number of actors for each process to handle
+		chunksize = int(math.ceil(len(actors) / float(numProcs)))
+		# TODO: pickling error with inputs/outputs
+		for dist in pool.imap(self.learnBaconNumberDistribution2, actors, chunksize):
+			print dist
+		return self.dist # TODO: change this
 
 	def learnBaconNumberDistribution(self, actors):
 		"""Learns the distribution of the bacon number for the
@@ -87,7 +94,6 @@ class BNDlearner:
 
 		numActors = len(actors)
 		baconNumbers = zeros((numActors), dtype=uint8) # smallest available int type
-		# TODO: multithread this!!!
 		for index, actor in enumerate(actors):
 			try:
 				bn = self.getBaconNumber(actor)
