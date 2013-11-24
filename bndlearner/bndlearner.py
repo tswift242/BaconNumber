@@ -1,9 +1,9 @@
 import requests
 from bs4 import BeautifulSoup
 import re
-from numpy import zeros, histogram, arange, uint8, float16
+import numpy as np
 from bndlexceptions import NoBaconNumber
-from multiprocessing import Pool
+from multiprocessing import Pool, cpu_count
 import math
 
 class BNDlearner(object):
@@ -14,17 +14,19 @@ class BNDlearner(object):
 	GOOGLE_URL_PREFIX = "https://www.google.com/search?q=bacon+number+"
 	ANSWER_CSS_CLASS = "answer_predicate" # full class is "answer_predicate vk_h"
 	NUMBER_EXTRACTOR_REGEX = ".*(\d+).*"
-	# TODO: possibly make this argument to self
 	DEFAULT_USER_AGENT = {"User-agent": "Mozilla/5.0 (Windows NT 6.1; Win64; X64; rv:25.0) Gecko 20100101 Firefox/25.0"}
 
-	def __init__(self, maxBaconNumber):
+	def __init__(self, maxBaconNumber=12, numProcs=cpu_count()):
 		"""
 		:attribute maxBaconNumber: maximum bacon number accounted for in the distribution
 		:attribute dist: bacon number distribution vector for values between 0 and 
 		maxBaconNumber, inclusive
+		:attribute numProcs: number of processes to run the learning computation on
 		"""
+
 		self.maxBaconNumber = maxBaconNumber
-		self.dist = zeros((self.maxBaconNumber+1), dtype=float16) # smallest available float type
+		self.dist = np.zeros((self.maxBaconNumber+1), dtype=np.float16)
+		self.numProcs = numProcs
 
 	
 	def learnBaconNumberDistributionFromFile(self, actorsFile):
@@ -44,7 +46,6 @@ class BNDlearner(object):
 			actors = f.readlines()
 			f.close()
 
-		print actors
 		#self.dist = self.learnBaconNumberDistribution(actors)
 		self.dist = self.learnBaconNumberDistributionMP(actors)
 		return self.dist
@@ -54,21 +55,24 @@ class BNDlearner(object):
 		provided list of actors using multiprocessing
 		"""
 
-		# TODO: pass this in to constructor
-		numProcs = 2
-		pool = Pool(processes=numProcs)
+		pool = Pool(processes=self.numProcs)
 		# number of actors for each process to handle
-		chunksize = int(math.ceil(len(actors) / float(numProcs)))
-		print chunksize
-		# TODO: pickling error with instance method
+		numActors = len(actors)
+		chunksize = int(math.ceil(numActors / float(self.numProcs)))
+		# partition actors into per-process sub-lists
+		chunks = [actors[i: i+chunksize]
+					for i in range(0, len(actors), chunksize)]
+		# cumulative distribution across all processes
+		cumdist = np.zeros((self.maxBaconNumber+1), dtype=np.float16)
 		# TODO: see if we can get any performance gains by using imap_unordered instead
-		for dist in pool.imap(self.learnBaconNumberDistribution2, actors, chunksize):
-			print dist
+		for dist in pool.imap(self.learnBaconNumberDistributionCounts2, chunks):
+			cumdist += dist
 		pool.close()
-		#pool.join()
-		return self.dist # TODO: change this
+		cumdist /= numActors
+		return cumdist
 
-	def learnBaconNumberDistribution(self, actors):
+	# TODO: parallelize the inner for loop here and compare with the approach above
+	def learnBaconNumberDistribution(self, actors, normalize=True):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors.
 		This approach stores computed bacon numbers in an intermediate array 
@@ -78,10 +82,12 @@ class BNDlearner(object):
 		As a result, this approach is faster under multiprocessing, but does require an extra amount of memory on a linear order.
 
 		:param actors: list of actor names
+		:param normalize: boolean indicating whether or not the resulting distribution
+		vector should be normalized
 		"""
 
 		numActors = len(actors)
-		baconNumbers = zeros((numActors), dtype=uint8) # smallest available int type
+		baconNumbers = np.zeros((numActors), dtype=np.uint8)
 		for index, actor in enumerate(actors):
 			try:
 				bn = self.getBaconNumber(actor)
@@ -96,10 +102,10 @@ class BNDlearner(object):
 		# compute normalized histogram from the gathered bacon numbers
 		# histogram's bins have upperbound maxBaconNumber+2 so that bacon numbers 
 		# maxBaconNumber-1 and maxBaconNumber are quantized into different bins
-		dist, bins = histogram(baconNumbers, bins=arange(self.maxBaconNumber+2), density=True)
+		dist, bins = np.histogram(baconNumbers, bins=np.arange(self.maxBaconNumber+2), density=normalize)
 		return dist
 
-	def learnBaconNumberDistribution2(self, actors):
+	def learnBaconNumberDistribution2(self, actors, normalize=True):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors.
 		This approach does not store computed bacon numbers in an intermediate array, 
@@ -108,10 +114,11 @@ class BNDlearner(object):
 		more complicated when multiprocessing
 
 		:param actors: list of actor names
+		:param normalize: boolean indicating whether or not the resulting distribution
+		vector should be normalized
 		"""
 
-		print actors
-		dist = zeros((self.maxBaconNumber+1), dtype=float16) #smallest available float type
+		dist = np.zeros((self.maxBaconNumber+1), dtype=np.float16)
 		for actor in actors:
 			try:
 				bn = self.getBaconNumber(actor)
@@ -124,9 +131,17 @@ class BNDlearner(object):
 					print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
 
 		# normalize distribution
-		numActors = len(actors)
-		dist /= numActors
+		if normalize:
+			numActors = len(actors)
+			dist /= numActors
 		return dist
+
+	def learnBaconNumberDistributionCounts2(self, actors):
+		"""Shortcut for learnBaconNumerDistribution2 with normalize set to False.
+		Simplies using the function with multiprocessing.
+		"""
+
+		return self.learnBaconNumberDistribution2(actors, False)
 
 	def getBaconNumber(self, actor):
 		"""Returns the Bacon Number of the given actor.
