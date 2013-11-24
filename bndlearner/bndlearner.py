@@ -6,15 +6,15 @@ from bndlexceptions import NoBaconNumber
 from multiprocessing import Pool
 import math
 
-class BNDlearner:
+class BNDlearner(object):
 	"""Learns the distribution the Bacon Number by
 	scraping the data from Google's Bacon Number feature
 	"""
 
 	GOOGLE_URL_PREFIX = "https://www.google.com/search?q=bacon+number+"
-	ANSWER_CSS_CLASS = "answer_predicate" #full class is "answer_predicate vk_h"
+	ANSWER_CSS_CLASS = "answer_predicate" # full class is "answer_predicate vk_h"
 	NUMBER_EXTRACTOR_REGEX = ".*(\d+).*"
-	#TODO: possibly make this argument to self
+	# TODO: possibly make this argument to self
 	DEFAULT_USER_AGENT = {"User-agent": "Mozilla/5.0 (Windows NT 6.1; Win64; X64; rv:25.0) Gecko 20100101 Firefox/25.0"}
 
 	def __init__(self, maxBaconNumber):
@@ -24,28 +24,9 @@ class BNDlearner:
 		maxBaconNumber, inclusive
 		"""
 		self.maxBaconNumber = maxBaconNumber
-		self.dist = zeros((self.maxBaconNumber+1), dtype=float16) #smallest available float type
+		self.dist = zeros((self.maxBaconNumber+1), dtype=float16) # smallest available float type
 
-	def getBaconNumber(self, actor):
-		"""Returns the Bacon Number of the given actor.
-
-		:param actor: string specifying the full name of an actor, 
-		e.g. "Johnny Depp"
-		"""
-
-		actorURL = BNDlearner.GOOGLE_URL_PREFIX + actor.replace(" ", "+")
-		#change user-agent to allow us to scrape data from Google
-		actorHtml = requests.get(actorURL, headers = BNDlearner.DEFAULT_USER_AGENT).text
-
-		#parse bacon number information from html
-		soup = BeautifulSoup(actorHtml)
-		answerTag = soup.find(class_=BNDlearner.ANSWER_CSS_CLASS)
-		if answerTag is None:
-			raise NoBaconNumber("no bacon number found", actor)
-
-		#parse number out of answerTag's string and return it
-		return self.extractNumber(answerTag.string)
-
+	
 	def learnBaconNumberDistributionFromFile(self, actorsFile):
 		"""Learns the distribution of the bacon number for the
 		list of actors provided in the given file.
@@ -54,7 +35,7 @@ class BNDlearner:
 		a list of actors
 		"""
 
-		#obtain list of actors
+		# obtain list of actors
 		try:
 			f = open(actorsFile, "r")
 		except IOError:
@@ -63,6 +44,8 @@ class BNDlearner:
 			actors = f.readlines()
 			f.close()
 
+		print actors
+		#self.dist = self.learnBaconNumberDistribution(actors)
 		self.dist = self.learnBaconNumberDistributionMP(actors)
 		return self.dist
 
@@ -71,13 +54,18 @@ class BNDlearner:
 		provided list of actors using multiprocessing
 		"""
 
-		numProcs = 4
+		# TODO: pass this in to constructor
+		numProcs = 2
 		pool = Pool(processes=numProcs)
-		#number of actors for each process to handle
+		# number of actors for each process to handle
 		chunksize = int(math.ceil(len(actors) / float(numProcs)))
-		# TODO: pickling error with inputs/outputs
+		print chunksize
+		# TODO: pickling error with instance method
+		# TODO: see if we can get any performance gains by using imap_unordered instead
 		for dist in pool.imap(self.learnBaconNumberDistribution2, actors, chunksize):
 			print dist
+		pool.close()
+		#pool.join()
 		return self.dist # TODO: change this
 
 	def learnBaconNumberDistribution(self, actors):
@@ -122,6 +110,7 @@ class BNDlearner:
 		:param actors: list of actor names
 		"""
 
+		print actors
 		dist = zeros((self.maxBaconNumber+1), dtype=float16) #smallest available float type
 		for actor in actors:
 			try:
@@ -139,8 +128,28 @@ class BNDlearner:
 		dist /= numActors
 		return dist
 
-	#private static
-	def extractNumber(self, string):
+	def getBaconNumber(self, actor):
+		"""Returns the Bacon Number of the given actor.
+
+		:param actor: string specifying the full name of an actor, 
+		e.g. "Johnny Depp"
+		"""
+
+		actorURL = BNDlearner.GOOGLE_URL_PREFIX + actor.replace(" ", "+")
+		# change user-agent to allow us to scrape data from Google
+		actorHtml = requests.get(actorURL, headers = BNDlearner.DEFAULT_USER_AGENT).text
+
+		# parse bacon number information from html
+		soup = BeautifulSoup(actorHtml)
+		answerTag = soup.find(class_=BNDlearner.ANSWER_CSS_CLASS)
+		if answerTag is None:
+			raise NoBaconNumber("no bacon number found", actor)
+
+		# parse number out of answerTag's string and return it
+		return self._extractNumber(answerTag.string)
+
+	# private static
+	def _extractNumber(self, string):
 		"""Extracts the first number from a string, 
 		casts it to an integer, and then returns it.
 
