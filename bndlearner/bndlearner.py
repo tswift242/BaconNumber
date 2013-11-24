@@ -28,7 +28,7 @@ class BNDlearner(object):
 		self.dist = np.zeros((self.maxBaconNumber+1), dtype=np.float16)
 		self.numProcs = numProcs
 
-	def learnBaconNumberDistributionFromFile(self, actorsFile):
+	def learnBaconNumberDistributionFromFile(self, actorsFile, normalize=True):
 		"""Learns the distribution of the bacon number for the
 		list of actors provided in the given file.
 
@@ -47,16 +47,36 @@ class BNDlearner(object):
 		# remove trailing newlines
 		actors = [actor.rstrip() for actor in actors]
 
-		self.dist = self.learnBaconNumberDistribution(actors)
-		#self.dist = self.learnBaconNumberDistributionMP(actors)
-		#self.dist = self.learnBaconNumberDistribution2(actors)
+		return self.learnBaconNumberDistribution(actors, normalize, 0)
+
+	def learnBaconNumberDistribution(self, actors, normalize=True, mode=0):
+		"""Learns the distribution of the bacon number in a way dependent
+		on the input mode, and self.numProcs
+
+		:param actors: list of actor names
+		:param normalize: boolean indicating whether or not the resulting distribution
+		vector should be normalized
+		:param mode: how the distribution should be calculated
+		"""
+		if self.numProcs == 1: # single process case
+			self.dist = self._learnBaconNumberDistributionSP(actors, normalize)
+		elif mode == 0: # first multiprocessing approach
+			self.dist = self._learnBaconNumberDistributionMP(actors, normalize)
+		elif mode == 1: # second multiprocessing approach
+			self.dist = self._learnBaconNumberDistributionMP2(actors, normalize)
+		else: # default case
+			self.dist = self._learnBaconNumberDistributionMP(actors, normalize)
 		return self.dist
 
-	def learnBaconNumberDistributionMP(self, actors, normalize=True):
+	def _learnBaconNumberDistributionMP(self, actors, normalize=True):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors using multiprocessing.
 		Uses parallel divide-and-conquer approach of doing P parallel
 		calls across P process, each on an actor sub-list of size N/P.
+
+		:param actors: list of actor names
+		:param normalize: boolean indicating whether or not the resulting distribution
+		vector should be normalized
 		"""
 
 		pool = Pool(processes=self.numProcs)
@@ -69,14 +89,14 @@ class BNDlearner(object):
 		# cumulative distribution across all processes
 		cumdist = np.zeros((self.maxBaconNumber+1), dtype=np.float16)
 		# TODO: see if we can get any performance gains by using imap_unordered instead
-		for dist in pool.imap_unordered(self.learnBaconNumberDistributionCounts2, chunks):
+		for dist in pool.imap_unordered(self._learnBaconNumberDistributionCountsSP, chunks):
 			cumdist += dist
 		pool.close()
 		if normalize:
 			cumdist /= numActors
 		return cumdist
 
-	def learnBaconNumberDistribution2(self, actors, normalize=True):
+	def _learnBaconNumberDistributionSP(self, actors, normalize=True):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors.
 		This approach does not store computed bacon numbers in an intermediate array, 
@@ -108,14 +128,14 @@ class BNDlearner(object):
 			dist /= numActors
 		return dist
 
-	def learnBaconNumberDistributionCounts2(self, actors):
+	def _learnBaconNumberDistributionCountsSP(self, actors):
 		"""Shortcut for learnBaconNumerDistribution2 with normalize set to False.
 		Simplies using the function with multiprocessing.
 		"""
 
-		return self.learnBaconNumberDistribution2(actors, False)
+		return self._learnBaconNumberDistributionSP(actors, False)
 
-	def learnBaconNumberDistribution(self, actors, normalize=True):
+	def _learnBaconNumberDistributionMP2(self, actors, normalize=True):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors.
 		This approach stores computed bacon numbers in an intermediate array 
