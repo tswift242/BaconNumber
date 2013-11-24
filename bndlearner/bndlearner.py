@@ -47,6 +47,7 @@ class BNDlearner(object):
 			f.close()
 
 		#self.dist = self.learnBaconNumberDistribution(actors)
+		#self.dist = self.learnBaconNumberDistribution2(actors)
 		self.dist = self.learnBaconNumberDistributionMP(actors)
 		return self.dist
 
