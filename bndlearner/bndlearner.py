@@ -48,11 +48,11 @@ class BNDlearner(object):
 		actors = [actor.rstrip() for actor in actors]
 
 		self.dist = self.learnBaconNumberDistribution(actors)
-		#self.dist = self.learnBaconNumberDistribution2(actors)
 		#self.dist = self.learnBaconNumberDistributionMP(actors)
+		#self.dist = self.learnBaconNumberDistribution2(actors)
 		return self.dist
 
-	def learnBaconNumberDistributionMP(self, actors):
+	def learnBaconNumberDistributionMP(self, actors, normalize=True):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors using multiprocessing.
 		Uses parallel divide-and-conquer approach of doing P parallel
@@ -69,47 +69,12 @@ class BNDlearner(object):
 		# cumulative distribution across all processes
 		cumdist = np.zeros((self.maxBaconNumber+1), dtype=np.float16)
 		# TODO: see if we can get any performance gains by using imap_unordered instead
-		for dist in pool.imap(self.learnBaconNumberDistributionCounts2, chunks):
+		for dist in pool.imap_unordered(self.learnBaconNumberDistributionCounts2, chunks):
 			cumdist += dist
 		pool.close()
-		cumdist /= numActors
+		if normalize:
+			cumdist /= numActors
 		return cumdist
-
-	# TODO: parallelize the inner for loop here and compare with the approach above
-	def learnBaconNumberDistribution(self, actors, normalize=True):
-		"""Learns the distribution of the bacon number for the
-		provided list of actors.
-		This approach stores computed bacon numbers in an intermediate array 
-		to avoid otherwise necessary synchronization costs on the shared resource dist.
-		A histogram is then created across the intermediate array and then normalized, 
-		leading to the final distribution.
-		As a result, this approach is faster under multiprocessing than an approach that
-		doesn't store intermediate results (such as the single process implementation), 
-		but does require an extra amount of memory on a linear order.
-
-		:param actors: list of actor names
-		:param normalize: boolean indicating whether or not the resulting distribution
-		vector should be normalized
-		"""
-
-		numActors = len(actors)
-		baconNumbers = np.zeros((numActors), dtype=np.uint8)
-		for index, actor in enumerate(actors):
-			try:
-				bn = self.getBaconNumber(actor)
-			except NoBaconNumber as e:
-				print "Warning: {0}".format(str(e))
-			else:
-				if bn <= self.maxBaconNumber:
-					baconNumbers[index] = bn
-				else:
-					print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
-
-		# compute normalized histogram from the gathered bacon numbers
-		# histogram's bins have upperbound maxBaconNumber+2 so that bacon numbers 
-		# maxBaconNumber-1 and maxBaconNumber are quantized into different bins
-		dist, bins = np.histogram(baconNumbers, bins=np.arange(self.maxBaconNumber+2), density=normalize)
-		return dist
 
 	def learnBaconNumberDistribution2(self, actors, normalize=True):
 		"""Learns the distribution of the bacon number for the
@@ -117,7 +82,8 @@ class BNDlearner(object):
 		This approach does not store computed bacon numbers in an intermediate array, 
 		but rather manually computes the histogram of the distribution online.
 		As a result, this approach is more costly (time-wise) and 
-		more complicated when multiprocessing
+		more complicated when multiprocessing, and so we leave it as a single process
+		implementation.
 
 		:param actors: list of actor names
 		:param normalize: boolean indicating whether or not the resulting distribution
@@ -148,6 +114,53 @@ class BNDlearner(object):
 		"""
 
 		return self.learnBaconNumberDistribution2(actors, False)
+
+	def learnBaconNumberDistribution(self, actors, normalize=True):
+		"""Learns the distribution of the bacon number for the
+		provided list of actors.
+		This approach stores computed bacon numbers in an intermediate array 
+		to avoid otherwise necessary synchronization costs on the shared resource dist.
+		A histogram is then created across the intermediate array and then normalized, 
+		leading to the final distribution.
+		As a result, this approach is faster under multiprocessing than an approach that
+		doesn't store intermediate results (such as the single process implementation), 
+		but does require an extra amount of memory on a linear order.
+
+		:param actors: list of actor names
+		:param normalize: boolean indicating whether or not the resulting distribution
+		vector should be normalized
+		"""
+
+		numActors = len(actors)
+		baconNumbers = np.zeros((numActors), dtype=np.uint8)
+
+		pool = Pool(processes=self.numProcs)
+		chunksize = int(math.ceil(numActors / (2 * float(self.numProcs))))
+		# TODO: this does not handle NoBaconNumber exceptions gracefully
+		for index, bn in enumerate(pool.imap_unordered(self.getBaconNumber, actors, chunksize)):
+			if bn <= self.maxBaconNumber:
+				baconNumbers[index] = bn
+			else:
+				print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
+		pool.close()
+
+		# single process version commented out below
+		#for index, actor in enumerate(actors):
+			#try:
+				#bn = self.getBaconNumber(actor)
+			#except NoBaconNumber as e:
+				#print "Warning: {0}".format(str(e))
+			#else:
+				#if bn <= self.maxBaconNumber:
+					#baconNumbers[index] = bn
+				#else:
+					#print "Warning: bacon number {0} for actor {1} exceeds maximum bacon number of {2}, and so is being ignored".format(bn,actor,self.maxBaconNumber)
+
+		# compute normalized histogram from the gathered bacon numbers
+		# histogram's bins have upperbound maxBaconNumber+2 so that bacon numbers 
+		# maxBaconNumber-1 and maxBaconNumber are quantized into different bins
+		dist, bins = np.histogram(baconNumbers, bins=np.arange(self.maxBaconNumber+2), density=normalize)
+		return dist
 
 	def getBaconNumber(self, actor):
 		"""Returns the Bacon Number of the given actor.
