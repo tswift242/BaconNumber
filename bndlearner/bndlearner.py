@@ -28,7 +28,6 @@ class BNDlearner(object):
 		self.dist = np.zeros((self.maxBaconNumber+1), dtype=np.float16)
 		self.numProcs = numProcs
 
-	
 	def learnBaconNumberDistributionFromFile(self, actorsFile):
 		"""Learns the distribution of the bacon number for the
 		list of actors provided in the given file.
@@ -41,19 +40,23 @@ class BNDlearner(object):
 		try:
 			f = open(actorsFile, "r")
 		except IOError:
-			raise #let the caller handle this
+			raise # let the caller handle this
 		else:
 			actors = f.readlines()
 			f.close()
+		# remove trailing newlines
+		actors = [actor.rstrip() for actor in actors]
 
-		#self.dist = self.learnBaconNumberDistribution(actors)
+		self.dist = self.learnBaconNumberDistribution(actors)
 		#self.dist = self.learnBaconNumberDistribution2(actors)
-		self.dist = self.learnBaconNumberDistributionMP(actors)
+		#self.dist = self.learnBaconNumberDistributionMP(actors)
 		return self.dist
 
 	def learnBaconNumberDistributionMP(self, actors):
 		"""Learns the distribution of the bacon number for the
-		provided list of actors using multiprocessing
+		provided list of actors using multiprocessing.
+		Uses parallel divide-and-conquer approach of doing P parallel
+		calls across P process, each on an actor sub-list of size N/P.
 		"""
 
 		pool = Pool(processes=self.numProcs)
@@ -77,10 +80,12 @@ class BNDlearner(object):
 		"""Learns the distribution of the bacon number for the
 		provided list of actors.
 		This approach stores computed bacon numbers in an intermediate array 
-		to avoid otherwise necessary synchronization costs on the shared resource self.dist.
+		to avoid otherwise necessary synchronization costs on the shared resource dist.
 		A histogram is then created across the intermediate array and then normalized, 
 		leading to the final distribution.
-		As a result, this approach is faster under multiprocessing, but does require an extra amount of memory on a linear order.
+		As a result, this approach is faster under multiprocessing than an approach that
+		doesn't store intermediate results (such as the single process implementation), 
+		but does require an extra amount of memory on a linear order.
 
 		:param actors: list of actor names
 		:param normalize: boolean indicating whether or not the resulting distribution
